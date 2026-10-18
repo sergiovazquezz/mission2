@@ -1,4 +1,5 @@
 import { validateForecast } from "./weather.js";
+import { readForecastCache, writeForecastCache } from "./cache.js";
 
 const SEARCH_URL = "https://geocoding-api.open-meteo.com/v1/search";
 const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
@@ -68,7 +69,13 @@ export async function searchCities(query) {
         }));
 }
 
-export async function getForecast(city) {
+export async function getForecast(city, refresh = false) {
+    const cached = refresh ? null : readForecastCache(city);
+
+    if (cached) {
+        return { data: cached.data, retrievedAt: cached.retrievedAt };
+    }
+
     const url = new URL(FORECAST_URL);
 
     url.search = new URLSearchParams({
@@ -85,6 +92,7 @@ export async function getForecast(city) {
 
     const result = await requestJSON(url.href);
     validateForecast(result.data);
+    writeForecastCache(city, result);
 
     return result;
 }

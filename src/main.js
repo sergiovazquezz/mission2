@@ -1,6 +1,7 @@
 import "./styles.css";
 import { searchCities, getForecast } from "./api.js";
 import { normalizeHours, getDays } from "./weather.js";
+import { readForecastCache } from "./cache.js";
 import {
     elements, setBusy, renderCities, renderRules, renderDays, renderForecast,
 } from "./ui.js";
@@ -20,10 +21,13 @@ function changeDay(date) {
     renderForecast(state);
 }
 
-async function loadForecast(city) {
+async function loadForecast(city, refresh = false) {
     if (state.busy) {
         return;
     }
+
+    const sameCity = state.city?.latitude === city.latitude && state.city?.longitude === city.longitude;
+    const previousDate = sameCity ? state.date : "";
 
     state.busy = true;
     state.city = city;
@@ -35,18 +39,19 @@ async function loadForecast(city) {
     setBusy(true);
 
     try {
-        const { data, retrievedAt } = await getForecast(city);
+        const { data, retrievedAt } = await getForecast(city, refresh);
         state.forecast = data;
         state.retrievedAt = retrievedAt;
         state.hours = normalizeHours(data);
 
         const days = getDays(state.hours, data.current.time);
-        state.date = days[0];
+        state.date = days.includes(previousDate) ? previousDate : days[0];
         renderDays(days, changeDay);
         renderForecast(state);
         elements.forecastStatus.textContent = `Forecast ready for ${city.name}. Choose a day to find your window.`;
         elements.cityResults.replaceChildren();
         elements.searchStatus.textContent = "Want a change of scenery? Search another city.";
+        elements.searchInput.value = city.name;
         elements.location.tabIndex = -1;
         elements.location.focus({ preventScroll: true });
     } catch (error) {
@@ -102,7 +107,13 @@ elements.activities.addEventListener("change", (event) => {
     }
 });
 
-elements.refreshButton.addEventListener("click", () => loadForecast(state.city));
-elements.retryButton.addEventListener("click", () => loadForecast(state.city));
+elements.refreshButton.addEventListener("click", () => loadForecast(state.city, true));
+elements.retryButton.addEventListener("click", () => loadForecast(state.city, true));
 
 renderRules(state.activity);
+
+const cached = readForecastCache();
+
+if (cached) {
+    loadForecast(cached.city);
+}
