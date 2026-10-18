@@ -44,6 +44,7 @@ export function setBusy(busy) {
     elements.retryButton.disabled = busy;
     elements.activities.disabled = busy;
     elements.form.setAttribute("aria-busy", String(busy));
+    elements.forecast.setAttribute("aria-busy", String(busy));
 
     elements.cityResults.querySelectorAll("button").forEach((button) => {
         button.disabled = busy;

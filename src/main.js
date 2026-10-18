@@ -50,6 +50,8 @@ async function loadForecast(city) {
         elements.location.tabIndex = -1;
         elements.location.focus({ preventScroll: true });
     } catch (error) {
+        state.forecast = null;
+        elements.forecast.hidden = true;
         elements.forecastStatus.textContent = error.message;
         elements.retryButton.hidden = false;
     } finally {
@@ -62,6 +64,13 @@ elements.form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
     if (state.busy) {
+        return;
+    }
+
+    if (elements.searchInput.value.trim().length < 2) {
+        elements.searchStatus.textContent = "Enter at least two characters to find a city.";
+        elements.cityResults.replaceChildren();
+        elements.searchInput.focus();
         return;
     }
 

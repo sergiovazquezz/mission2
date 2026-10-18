@@ -1,3 +1,5 @@
+import { validateForecast } from "./weather.js";
+
 const SEARCH_URL = "https://geocoding-api.open-meteo.com/v1/search";
 const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 
@@ -52,7 +54,7 @@ export async function searchCities(query) {
     return data.results
         .filter(
             (city) =>
-                typeof city.name === "string" &&
+                city && typeof city.name === "string" &&
                 Number.isFinite(city.latitude) &&
                 Number.isFinite(city.longitude)
         )
@@ -81,5 +83,8 @@ export async function getForecast(city) {
         wind_speed_unit: "kmh",
     });
 
-    return requestJSON(url.href);
+    const result = await requestJSON(url.href);
+    validateForecast(result.data);
+
+    return result;
 }

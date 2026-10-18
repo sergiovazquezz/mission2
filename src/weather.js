@@ -4,6 +4,38 @@ export const ACTIVITIES = {
     picnic: { label: "Picnic", minTemperature: 16, maxTemperature: 30, maxRain: 10, maxWind: 12 },
 };
 
+export function validateForecast(data) {
+    const hourly = data?.hourly;
+    const arrays = [
+        hourly?.time, hourly?.temperature_2m, hourly?.precipitation_probability,
+        hourly?.wind_speed_10m, hourly?.is_day,
+    ];
+
+    if (!arrays.every(Array.isArray) || hourly.time.length === 0
+        || !arrays.every((array) => array.length === hourly.time.length)) {
+        throw new Error("No usable hourly forecast is available. Try another city or refresh.");
+    }
+
+    const validTimes = hourly.time.every((time, index) => (
+        typeof time === "string" && time.length === 16 && time[10] === "T"
+        && time.endsWith(":00") && (index === 0 || time > hourly.time[index - 1])
+    ));
+
+    if (!validTimes || typeof data.current?.time !== "string"
+        || data.current.time.length !== 16 || typeof data.timezone !== "string") {
+        throw new Error("The forecast response has incomplete dates or times. Please try again.");
+    }
+
+    const hours = normalizeHours(data);
+    const usable = hours.some((hour) => (
+        hour.time >= data.current.time && getHourReason(hour, ACTIVITIES.walking) !== "Data unavailable"
+    ));
+
+    if (!usable) {
+        throw new Error("No usable upcoming weather data is available. Try another city or refresh.");
+    }
+}
+
 export function normalizeHours(data) {
     return data.hourly.time.map((time, index) => ({
         index,
@@ -13,7 +45,7 @@ export function normalizeHours(data) {
         temperature: data.hourly.temperature_2m[index],
         rain: data.hourly.precipitation_probability[index],
         wind: data.hourly.wind_speed_10m[index],
-        daylight: data.hourly.is_day[index] === 1,
+        daylight: data.hourly.is_day[index] === 1 ? true : data.hourly.is_day[index] === 0 ? false : null,
     }));
 }
 
@@ -27,7 +59,8 @@ export function getDayHours(hours, date, currentTime) {
 }
 
 export function getHourReason(hour, activity) {
-    if (![hour.temperature, hour.rain, hour.wind].every(Number.isFinite)) {
+    if (![hour.temperature, hour.rain, hour.wind].every(Number.isFinite)
+        || typeof hour.daylight !== "boolean" || hour.rain < 0 || hour.rain > 100 || hour.wind < 0) {
         return "Data unavailable";
     }
 
@@ -61,7 +94,11 @@ export function findWindows(hours, activity) {
         const previousWindow = windows[windows.length - 1];
         const previousHour = previousWindow?.[previousWindow.length - 1];
 
-        if (previousHour && previousHour.index + 1 === hour.index && previousHour.date === hour.date) {
+        const adjacentTime = previousHour
+            && Number(hour.clock.split(":")[0]) === Number(previousHour.clock.split(":")[0]) + 1;
+
+        if (previousHour && previousHour.index + 1 === hour.index
+            && previousHour.date === hour.date && adjacentTime) {
             previousWindow.push(hour);
         } else {
             windows.push([hour]);
