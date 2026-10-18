@@ -1,48 +1,99 @@
 import "./styles.css";
 import { searchCities, getForecast } from "./api.js";
+import { normalizeHours, getDays } from "./weather.js";
+import {
+    elements, setBusy, renderCities, renderRules, renderDays, renderForecast,
+} from "./ui.js";
 
-const form = document.querySelector("#search-form");
-const searchStatus = document.querySelector("#search-status");
-const forecastStatus = document.querySelector("#forecast-status");
-const searchButton = document.querySelector("#search-button");
-const cityResults = document.querySelector("#city-results");
+const state = {
+    city: null,
+    activity: "walking",
+    date: "",
+    forecast: null,
+    hours: [],
+    retrievedAt: null,
+    busy: false,
+};
 
-form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    searchButton.disabled = true;
-    searchStatus.textContent = "Finding your place…";
-    cityResults.replaceChildren();
+function changeDay(date) {
+    state.date = date;
+    renderForecast(state);
+}
+
+async function loadForecast(city) {
+    if (state.busy) {
+        return;
+    }
+
+    state.busy = true;
+    state.city = city;
+    state.forecast = null;
+    elements.forecast.hidden = true;
+    elements.welcome.hidden = true;
+    elements.retryButton.hidden = true;
+    elements.forecastStatus.textContent = `Looking at the sky over ${city.name}…`;
+    setBusy(true);
 
     try {
-        const cities = await searchCities(form.elements.city.value);
+        const { data, retrievedAt } = await getForecast(city);
+        state.forecast = data;
+        state.retrievedAt = retrievedAt;
+        state.hours = normalizeHours(data);
 
-        searchStatus.textContent = cities.length
-            ? "Choose your city below."
-            : "No cities found. Try another name.";
-
-        cities.forEach((city) => {
-            const item = document.createElement("li");
-            const button = document.createElement("button");
-
-            button.type = "button";
-            button.textContent = [city.name, city.region, city.country].filter(Boolean).join(", ");
-
-            button.addEventListener("click", async () => {
-                forecastStatus.textContent = "Looking at the sky…";
-                try {
-                    const { data } = await getForecast(city);
-                    forecastStatus.textContent = `Loaded ${data.hourly.time.length} forecast hours for ${city.name}.`;
-                } catch (error) {
-                    forecastStatus.textContent = error.message;
-                }
-            });
-
-            item.append(button);
-            cityResults.append(item);
-        });
+        const days = getDays(state.hours, data.current.time);
+        state.date = days[0];
+        renderDays(days, changeDay);
+        renderForecast(state);
+        elements.forecastStatus.textContent = `Forecast ready for ${city.name}. Choose a day to find your window.`;
+        elements.cityResults.replaceChildren();
+        elements.searchStatus.textContent = "Want a change of scenery? Search another city.";
+        elements.location.tabIndex = -1;
+        elements.location.focus({ preventScroll: true });
     } catch (error) {
-        searchStatus.textContent = error.message;
+        elements.forecastStatus.textContent = error.message;
+        elements.retryButton.hidden = false;
     } finally {
-        searchButton.disabled = false;
+        state.busy = false;
+        setBusy(false);
+    }
+}
+
+elements.form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    if (state.busy) {
+        return;
+    }
+
+    state.busy = true;
+    setBusy(true);
+    elements.searchStatus.textContent = "Finding your place…";
+    elements.cityResults.replaceChildren();
+
+    try {
+        const cities = await searchCities(elements.searchInput.value);
+        renderCities(cities, loadForecast);
+        elements.searchStatus.textContent = cities.length
+            ? `${cities.length} ${cities.length === 1 ? "place" : "places"} found. Choose your city below.`
+            : "No cities found. Try another name, or add a country after a comma.";
+    } catch (error) {
+        elements.searchStatus.textContent = error.message;
+    } finally {
+        state.busy = false;
+        setBusy(false);
     }
 });
+
+elements.activities.addEventListener("change", (event) => {
+    state.activity = event.target.value;
+    renderRules(state.activity);
+
+    if (state.forecast) {
+        renderForecast(state);
+    }
+});
+
+elements.refreshButton.addEventListener("click", () => loadForecast(state.city));
+elements.retryButton.addEventListener("click", () => loadForecast(state.city));
+
+renderRules(state.activity);
