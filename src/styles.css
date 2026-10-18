@@ -1,0 +1,4 @@
+:root { font-family: system-ui, sans-serif; color: #203b50; background: #f8faf9; }
+body { margin: 0; }
+.container { width: min(1120px, 90%); margin-inline: auto; }
+[hidden] { display: none !important; }
